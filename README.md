@@ -11,6 +11,12 @@ Gitly is an AI-powered GitHub Secret Scanner designed to quickly and efficiently
 - **Commit History Analysis**: Option to scan historical commits in addition to the latest codebase.
 - **Export Options**: Download scan reports in JSON, CSV, or PDF formats.
 
+## Screenshots
+
+![Login Screen](Resources/brave_screenshot_localhost.png)
+![Scanning Dashboard](Resources/brave_screenshot_localhost%20(1).png)
+![Results View](Resources/brave_screenshot_localhost%20(2).png)
+
 ## Architecture
 
 Gitly consists of two main components:
