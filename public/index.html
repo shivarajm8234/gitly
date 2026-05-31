@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Gitly — AI-Powered GitHub Secret Scanner</title>
+<meta name="description" content="Scan any public GitHub repository for exposed secrets, API keys, credentials, and sensitive data across the entire git history."/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'></text></svg>"/>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     LOGIN OVERLAY — shown until auth confirmed
+════════════════════════════════════════════════════════════ -->
+<div id="login-overlay" style="
+  position:fixed;inset:0;z-index:9999;
+  background:radial-gradient(ellipse 120% 80% at 50% -10%, rgba(99,102,241,0.18), transparent 60%), #07080f;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Inter',sans-serif;
+">
+  <div style="
+    background:rgba(13,15,26,0.92);border:1px solid rgba(255,255,255,0.09);
+    border-radius:24px;padding:48px 40px;max-width:400px;width:90%;
+    text-align:center;box-shadow:0 32px 80px rgba(0,0,0,0.6);
+    backdrop-filter:blur(24px);
+  ">
+    <!-- Logo -->
+    <div style="width:64px;height:64px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:18px;display:grid;place-items:center;font-size:1.8rem;margin:0 auto 24px;"></div>
+    <div style="font-size:1.6rem;font-weight:800;letter-spacing:-0.5px;margin-bottom:6px;color:#f1f5f9;">Gitly</div>
+    <div style="font-size:.85rem;color:#94a3b8;margin-bottom:32px;line-height:1.6;">AI-Powered GitHub Secret Scanner<br/>Authorised access only.</div>
+
+    <!-- Email input -->
+    <div style="position:relative;margin-bottom:12px;text-align:left;">
+      <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:1rem;color:#475569;pointer-events:none;"></span>
+      <input type="email" id="auth-email" placeholder="your@gmail.com" autocomplete="email"
+        style="width:100%;background:#12152a;border:1px solid rgba(255,255,255,0.1);border-radius:12px;
+               color:#f1f5f9;font-family:inherit;font-size:.95rem;padding:14px 14px 14px 44px;
+               outline:none;transition:border-color .2s;box-sizing:border-box;"
+        onfocus="this.style.borderColor='#6366f1';"
+        onblur="this.style.borderColor='rgba(255,255,255,0.1)';"
+        onkeydown="if(event.key==='Enter') signIn();"
+      />
+    </div>
+
+    <!-- Submit button -->
+    <button id="login-submit-btn" onclick="signIn()" style="
+      width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+      background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:12px;
+      padding:14px 20px;font-size:.95rem;font-weight:600;cursor:pointer;
+      font-family:inherit;transition:all .2s;box-shadow:0 4px 20px rgba(99,102,241,0.35);
+    "
+    onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 30px rgba(99,102,241,0.5)';"
+    onmouseout="this.style.transform='';this.style.boxShadow='0 4px 20px rgba(99,102,241,0.35)';">
+      <span></span> Continue
+    </button>
+
+    <!-- Error message -->
+    <div id="login-message" style="margin-top:14px;font-size:.82rem;display:none;"></div>
+
+    <div style="margin-top:24px;font-size:.72rem;color:#334155;border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;">
+      Access restricted to authorised accounts only.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     APP SHELL — hidden until auth confirmed
+════════════════════════════════════════════════════════════ -->
+<div id="app-shell" style="display:none">
+<div id="app">
+
+<!-- ── Navbar ────────────────────────────────────────── -->
+<nav class="navbar">
+  <div class="container navbar-inner">
+    <div class="logo">
+      <div class="logo-icon"></div>
+      <span>Gitly</span>
+      <div class="nav-badge">BETA</div>
+    </div>
+    <div class="flex gap-3 items-center">
+      <div class="rate-limit-badge" id="rate-limit-display">
+        <div class="rate-dot"></div>
+        <span id="rate-limit-text">API Ready</span>
+      </div>
+      <div id="user-badge"></div>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Hero / Scan Form ──────────────────────────────── -->
+<section class="hero" id="hero-section">
+  <div class="container">
+    <div class="hero-badge"> AI-Powered Security Intelligence · 85+ Detection Patterns · Full Git History</div>
+    <h1>Find <span>Exposed Secrets</span><br/>Before Attackers Do</h1>
+    <p>Deep-scan any public GitHub repository for leaked API keys, hardcoded credentials, private keys, and sensitive data — across all commits, branches, and deleted files.</p>
+
+    <div class="scan-card">
+      <!-- URL + Token row -->
+      <div class="scan-row">
+        <div class="input-wrap" style="flex:2">
+          <span class="icon"></span>
+          <input type="text" id="repo-url" placeholder="https://github.com/owner/repository" autocomplete="off" spellcheck="false" value="https://github.com/shivarajm8234/Bubbly"/>
+        </div>
+        <div class="input-wrap">
+          <span class="icon"></span>
+          <input type="password" id="github-token" placeholder="GitHub Token (optional)" autocomplete="off" class="input-no-icon" style="padding-left:42px"/>
+        </div>
+      </div>
+
+      <!-- Options row -->
+      <div class="scan-options">
+        <div class="option-group">
+          <label>Scan Mode</label>
+          <select id="scan-mode">
+            <option value="quick"> Quick Scan (latest code)</option>
+            <option value="deep"> Deep Scan (full history)</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>Max History Commits</label>
+          <select id="max-commits">
+            <option value="50">50 commits</option>
+            <option value="100" selected>100 commits</option>
+            <option value="200">200 commits</option>
+            <option value="500">500 commits</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>Max Branches</label>
+          <select id="max-branches">
+            <option value="1">Default branch only</option>
+            <option value="3">Up to 3 branches</option>
+            <option value="5" selected>Up to 5 branches</option>
+            <option value="10">Up to 10 branches</option>
+          </select>
+        </div>
+        <div class="option-group">
+          <label>Entropy Analysis</label>
+          <div class="toggle-row">
+            <span>High-entropy strings</span>
+            <label class="toggle">
+              <input type="checkbox" id="entropy-toggle" checked/>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom rules -->
+      <div class="custom-rules-area" id="custom-rules-wrap" style="display:none">
+        <div class="option-group">
+          <label>Custom Detection Rules (one per line: name::regex or name::keyword)</label>
+          <textarea id="custom-rules" class="input-no-icon" placeholder="MyKey::MYKEY_[A-Z0-9]{32}&#10;InternalToken::internal_token&#10;SecretPassword::mysecretprefix"></textarea>
+        </div>
+      </div>
+
+      <div class="scan-actions">
+        <button class="btn btn-ghost" id="toggle-custom-rules"> Custom Rules</button>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span class="scan-meta" id="scan-meta-text">Ready to scan</span>
+          <button class="btn btn-primary" id="scan-btn">
+            <span></span> Start Scan
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pattern count teaser -->
+    <div style="margin-top:24px;display:flex;justify-content:center;gap:32px;flex-wrap:wrap">
+      <div class="hero-stat"><span class="hero-stat-num" id="pattern-count">85+</span> Detection Patterns</div>
+      <div class="hero-stat"><span class="hero-stat-num">12+</span> Languages</div>
+      <div class="hero-stat"><span class="hero-stat-num">∞</span> Git History Depth</div>
+    </div>
+  </div>
+</section>
+
+<style>
+.hero-stat{text-align:center;font-size:.85rem;color:var(--text-3)}
+.hero-stat-num{display:block;font-size:1.4rem;font-weight:800;color:var(--accent);margin-bottom:2px}
+</style>
+
+<!-- ── Scan Progress ──────────────────────────────────── -->
+<section id="scan-progress" class="container">
+  <div class="progress-card">
+    <div class="radar-wrap">
+      <div class="radar">
+        <svg viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+          <circle class="radar-ring" cx="80" cy="80" r="70" stroke-width="1"/>
+          <circle class="radar-ring" cx="80" cy="80" r="50" stroke-width="1"/>
+          <circle class="radar-ring" cx="80" cy="80" r="30" stroke-width="1"/>
+          <line x1="80" y1="10" x2="80" y2="150" stroke="rgba(99,102,241,0.1)" stroke-width="1"/>
+          <line x1="10" y1="80" x2="150" y2="80" stroke="rgba(99,102,241,0.1)" stroke-width="1"/>
+          <g class="radar-sweep">
+            <path d="M80 80 L80 12 A68 68 0 0 1 148 80 Z" fill="url(#sweep-grad)" opacity="0.6"/>
+            <circle cx="80" cy="12" r="3" fill="var(--accent)"/>
+          </g>
+          <defs>
+            <linearGradient id="sweep-grad" x1="80" y1="80" x2="148" y2="80" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.3"/>
+              <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    </div>
+
+    <div class="progress-stats">
+      <div><div class="progress-stat-val" id="prog-files">0</div><div class="progress-stat-lbl">Files Scanned</div></div>
+      <div><div class="progress-stat-val" id="prog-findings" style="color:var(--rose)">0</div><div class="progress-stat-lbl">Findings</div></div>
+      <div><div class="progress-stat-val" id="prog-commits" style="color:var(--cyan)">0</div><div class="progress-stat-lbl">Commits Checked</div></div>
+    </div>
+
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progress-bar"></div>
+    </div>
+    <div style="font-size:.78rem;color:var(--text-3);margin-bottom:12px;text-align:center" id="progress-label">Initializing...</div>
+
+    <div class="progress-log" id="progress-log"></div>
+
+    <div style="margin-top:16px;text-align:center">
+      <button class="btn btn-danger" id="cancel-btn"> Cancel Scan</button>
+    </div>
+  </div>
+</section>
+
+<!-- ── Dashboard ─────────────────────────────────────── -->
+<section id="dashboard" class="container">
+
+  <!-- Header -->
+  <div class="dash-header">
+    <div class="dash-repo">
+      <div style="font-size:2rem"></div>
+      <div>
+        <div class="dash-repo-name" id="dash-repo-name">—</div>
+        <div class="dash-repo-meta" id="dash-repo-meta">—</div>
+      </div>
+    </div>
+    <div class="flex gap-3 items-center">
+      <div class="health-ring-wrap">
+        <div class="health-ring">
+          <svg viewBox="0 0 90 90">
+            <circle class="health-ring-track" cx="45" cy="45" r="36"/>
+            <circle class="health-ring-fill" id="health-ring-fill" cx="45" cy="45" r="36"
+              stroke-dasharray="226" stroke-dashoffset="226" stroke="var(--emerald)"/>
+          </svg>
+          <div class="health-score-num" id="health-score-num">—</div>
+        </div>
+        <div>
+          <div class="health-label">Repo Health</div>
+          <div class="health-grade" id="health-grade">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="dash-actions">
+      <button class="btn btn-secondary" id="new-scan-btn"> New Scan</button>
+      <button class="btn btn-secondary" id="export-json-btn"> JSON</button>
+      <button class="btn btn-secondary" id="export-csv-btn"> CSV</button>
+      <button class="btn btn-secondary" id="export-pdf-btn"> PDF</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-card-val" id="stat-total">0</div><div class="stat-card-lbl">Total Findings</div></div>
+    <div class="stat-card crit"><div class="stat-card-val" id="stat-crit">0</div><div class="stat-card-lbl"> Critical</div></div>
+    <div class="stat-card high"><div class="stat-card-val" id="stat-high">0</div><div class="stat-card-lbl"> High</div></div>
+    <div class="stat-card med"><div class="stat-card-val" id="stat-med">0</div><div class="stat-card-lbl"> Medium</div></div>
+    <div class="stat-card low"><div class="stat-card-val" id="stat-low">0</div><div class="stat-card-lbl"> Low</div></div>
+    <div class="stat-card"><div class="stat-card-val" id="stat-files">0</div><div class="stat-card-lbl">Files Scanned</div></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Severity Distribution</div>
+      <div class="chart-wrap"><canvas id="severity-chart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Findings by Category</div>
+      <div class="chart-wrap"><canvas id="category-chart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Keys Found Section — separated by current code vs history -->
+  <div class="findings-section" style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:1.3rem"></span>
+        <h3 style="margin:0;font-size:1.1rem;font-weight:700;color:var(--text-1)">Exposed Keys &amp; Secrets</h3>
+        <span class="sev-badge" id="keys-total-badge" style="font-size:.72rem;padding:3px 10px;background:rgba(99,102,241,.15);color:var(--accent);border-radius:99px">0 found</span>
+      </div>
+      <div style="display:flex;gap:4px;background:var(--glass);border:1px solid var(--glass-border);border-radius:10px;padding:3px">
+        <button class="keys-tab active" data-tab="current" onclick="switchKeysTab('current')"
+          style="padding:6px 16px;border:none;border-radius:8px;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;background:var(--accent);color:#fff">
+           Current Code
+        </button>
+        <button class="keys-tab" data-tab="history" onclick="switchKeysTab('history')"
+          style="padding:6px 16px;border:none;border-radius:8px;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;background:transparent;color:var(--text-3)">
+           Previous Commits
+        </button>
+      </div>
+    </div>
+
+    <div id="keys-current-panel">
+      <div id="keys-current-body" class="keys-card-grid"></div>
+    </div>
+    <div id="keys-history-panel" style="display:none">
+      <div id="keys-history-body" class="keys-card-grid"></div>
+    </div>
+  </div>
+
+  <!-- Findings Table (all findings) -->
+  <div class="findings-section">
+    <div class="findings-toolbar">
+      <div class="findings-search">
+        <span class="icon"></span>
+        <input type="text" id="findings-search" placeholder="Search findings, files, authors..." class="input-no-icon" style="padding-left:36px"/>
+      </div>
+      <div class="filter-chips">
+        <span class="chip all active" data-sev="all">All</span>
+        <span class="chip crit" data-sev="CRITICAL">Critical</span>
+        <span class="chip high" data-sev="HIGH">High</span>
+        <span class="chip med" data-sev="MEDIUM">Medium</span>
+        <span class="chip low" data-sev="LOW">Low</span>
+        <span class="chip info" data-sev="INFO">Info</span>
+      </div>
+      <div class="findings-count" id="findings-count">0 findings</div>
+    </div>
+
+    <div id="findings-body">
+      <div class="empty-findings">
+        <div class="empty-icon"></div>
+        <div class="empty-title">No findings yet</div>
+        <div class="empty-sub">Start a scan to detect secrets.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Commit Timeline -->
+  <div class="timeline-section">
+    <div class="timeline-title"> Commit-to-Secret Timeline</div>
+    <div class="chart-wrap" style="height:180px"><canvas id="timeline-chart"></canvas></div>
+  </div>
+
+  <!-- Repo Info -->
+  <div class="chart-card" style="margin-bottom:28px">
+    <div class="chart-title"> Repository Intelligence</div>
+    <div id="repo-intel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px"></div>
+  </div>
+
+</section>
+
+<!-- ── Toast Container ───────────────────────────────── -->
+<div id="toast-container"></div>
+
+</div><!-- /#app -->
+</div><!-- /#app-shell -->
+
+<!-- ── Scripts ───────────────────────────────────────── -->
+<!-- Locally-served libs: no CDN dependency -->
+<script src="/js/chart.umd.min.js"></script>
+<script src="/js/jspdf.umd.min.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/dashboard.js"></script>
+<script src="/js/reports.js"></script>
+<script src="/js/scanner.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/auth.js"></script>
+</body>
+</html>
