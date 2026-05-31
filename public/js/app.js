@@ -3,6 +3,21 @@
 // ============================================================
 
 (() => {
+  // ── Firebase Init ──────────────────────────────────────
+  const firebaseConfig = {
+    apiKey: "AIzaSyBrLCXiDKVMDc-vmEk6nVCBpAMrXaRaW88",
+    authDomain: "gitly-b00b0.firebaseapp.com",
+    databaseURL: "https://gitly-b00b0-default-rtdb.firebaseio.com",
+    projectId: "gitly-b00b0",
+    storageBucket: "gitly-b00b0.firebasestorage.app",
+    messagingSenderId: "551737804853",
+    appId: "1:551737804853:web:4f8f2cd83576d4eaf5097c"
+  };
+  
+  if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+
   // ── State ────────────────────────────────────────────
   let allFindings = [];
   let filteredFindings = [];
@@ -178,6 +193,31 @@
         Reports.setData(allFindings, repoInfo, summary);
         showDashboard(repoInfo, summary);
         checkRateLimit(document.getElementById('github-token').value.trim());
+
+        // Save to Firebase Realtime Database
+        if (typeof firebase !== 'undefined' && firebase.database) {
+          try {
+            const db = firebase.database();
+            const scanRef = db.ref('scans').push();
+            scanRef.set({
+              timestamp: firebase.database.ServerValue.TIMESTAMP,
+              repoUrl: document.getElementById('repo-url').value.trim(),
+              repoFullName: repoInfo.fullName || repoInfo.repo || 'unknown',
+              summary: summary,
+              // Storing only essential finding data to avoid database limits
+              findings: findings.map(f => ({
+                id: f.id,
+                severity: f.severity,
+                label: f.label,
+                file: f.file,
+                line: f.line || null
+              }))
+            });
+            console.log('[App] Saved scan results to Firebase');
+          } catch (e) {
+            console.error('[App] Failed to save scan results to Firebase:', e);
+          }
+        }
       },
       onError(msg) {
         scanActive = false;
